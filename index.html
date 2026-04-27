@@ -268,6 +268,72 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 .empty-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
 .empty-sub { font-size: 13px; line-height: 1.5; }
 
+/* ── CLASS 5 BADGE ── */
+.class5-banner {
+  background: linear-gradient(135deg, #00C853, #00E676);
+  color: #000;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 2px solid #00E676;
+}
+.class5-banner::before {
+  content: '✓';
+  font-size: 14px;
+  font-weight: 900;
+}
+.class5-tag {
+  background: linear-gradient(135deg, #00C853, #00E676) !important;
+  color: #000 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px;
+}
+.listing-card.has-class5 {
+  border-color: #00C853 !important;
+  box-shadow: 0 0 0 1px #00C85340;
+}
+
+/* ── NO CLASS5 MODAL ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+  z-index: 500; display: flex; align-items: flex-end;
+  justify-content: center; animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(6px);
+}
+.modal-box {
+  background: var(--surface); border-radius: 24px 24px 0 0;
+  width: 100%; max-width: 430px;
+  padding: 0 20px calc(var(--safe-bot) + 24px);
+  animation: slideUp 0.3s cubic-bezier(0.32,0.72,0,1);
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 14px auto 20px; }
+.modal-icon { font-size: 40px; text-align: center; margin-bottom: 12px; }
+.modal-title { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 8px; }
+.modal-body { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.6; margin-bottom: 20px; }
+.modal-body strong { color: var(--text); }
+.modal-btn-primary {
+  width: 100%; background: var(--accent); border: none; border-radius: 14px;
+  padding: 14px; color: white; font-family: 'Syne',sans-serif;
+  font-size: 15px; font-weight: 800; cursor: pointer; margin-bottom: 10px;
+}
+.modal-btn-secondary {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 13px; color: var(--text);
+  font-family: 'Syne',sans-serif; font-size: 14px; font-weight: 700;
+  cursor: pointer; margin-bottom: 8px;
+}
+.modal-btn-dismiss {
+  width: 100%; background: none; border: none; color: var(--muted);
+  font-family: 'Syne',sans-serif; font-size: 13px; cursor: pointer; padding: 8px;
+}
+
 /* ── SCANNING OVERLAY ── */
 .scan-anim {
   text-align: center; padding: 50px 20px;
@@ -362,6 +428,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     <div class="setting-group">
       <span class="setting-label">Keyword Filter (optional)</span>
       <input class="setting-input" id="settingKeyword" type="text" placeholder="e.g. PSV, D1, Ford Transit"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">Leave blank for all results. App auto-detects Class 5 / PSV listings.</div>
+    </div>
+
+    <div class="setting-group">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div>
+          <span class="setting-label" style="margin-bottom:2px">Search Whole UK</span>
+          <div style="font-size:11px;color:var(--muted)">Ignore postcode — find nationwide</div>
+        </div>
+        <div class="toggle-track" id="ukToggle" onclick="toggleUK(this)">
+          <div class="toggle-thumb"></div>
+        </div>
+      </div>
     </div>
 
     <div class="setting-group">
@@ -439,6 +518,7 @@ function startCountdown() {
 async function doRefresh() {
   if (state.scanning) return;
   state.scanning = true;
+  state.class5ModalShown = false;
   const btn = document.getElementById('btnRefresh');
   const icon = document.getElementById('refreshIcon');
   const label = document.getElementById('refreshLabel');
@@ -451,7 +531,7 @@ async function doRefresh() {
   try {
     const s = state.settings;
     const url = s.apiUrl
-      ? `${s.apiUrl.replace(/\/$/,'')}/api/listings?postcode=${encodeURIComponent(s.postcode)}&maxPrice=${s.maxPrice}&minSeats=${s.minSeats}&maxSeats=${s.maxSeats}&keyword=${encodeURIComponent(s.keyword)}&platforms=${s.platforms.join(',')}`
+      ? `${s.apiUrl.replace(/\/$/,'')}/api/listings?postcode=${encodeURIComponent(s.wholeUK ? 'NATIONWIDE' : s.postcode)}&maxPrice=${s.maxPrice}&minSeats=${s.minSeats}&maxSeats=${s.maxSeats}&keyword=${encodeURIComponent(s.keyword)}&platforms=${s.platforms.join(',')}&wholeUK=${s.wholeUK?'true':'false'}`
       : null;
 
     let listings = [];
@@ -522,11 +602,33 @@ function renderListings() {
   document.getElementById('listCount').textContent = `(${list.length})`;
 
   if (state.scanning) { el.innerHTML = scanAnimHTML(); return; }
+
+  // Detect if we have listings but NONE are confirmed Class 5/PSV
+  const hasAnyListings = state.listings.length > 0;
+  const c5Listings = list.filter(l => isClass5(l));
+  const nonC5Listings = list.filter(l => !isClass5(l));
+
+  if (hasAnyListings && c5Listings.length === 0 && !state.class5ModalShown && !state.settings.wholeUK) {
+    state.class5ModalShown = true;
+    showClass5Modal(list.length);
+  }
+
   if (!list.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No listings yet</div><div class="empty-sub">Tap "Scan All Platforms" to search,<br>or set your API URL in Settings ⚙</div></div>`;
     return;
   }
-  el.innerHTML = list.map((l,i) => cardHTML(l, i)).join('');
+
+  // Sort: Class 5 confirmed listings FIRST, then the rest
+  const sorted = [...c5Listings, ...nonC5Listings];
+
+  // Add a divider if we have both types
+  let html = sorted.map((l,i) => cardHTML(l,i)).join('');
+  if (c5Listings.length > 0 && nonC5Listings.length > 0) {
+    const divider = `<div style="padding:10px 4px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;border-top:1px solid var(--border);margin:4px 0">⬇ Other listings — Class 5 not confirmed in title</div>`;
+    html = c5Listings.map((l,i)=>cardHTML(l,i)).join('') + divider + nonC5Listings.map((l,i)=>cardHTML(l,i+c5Listings.length)).join('');
+  }
+
+  el.innerHTML = html;
 }
 
 function showScanAnimation() {
@@ -540,15 +642,22 @@ function scanAnimHTML() {
   return `<div class="scan-anim"><div class="scan-ring"></div><div style="font-size:14px;font-weight:700;margin-bottom:6px">Scanning platforms…</div><div style="font-size:12px;color:var(--muted);margin-bottom:14px">Searching for 17-seat minibuses under £${Number(state.settings.maxPrice).toLocaleString()}</div><div class="scan-platforms">${badges}</div></div>`;
 }
 
+function isClass5(listing) {
+  const text = `${listing.title} ${listing.description||''} ${listing.note||''}`.toLowerCase();
+  return /class\s*5|psv|public service vehicle|d1\s*(licence|license|cert)|psv\s*mot|psv\s*pass|section\s*19/.test(text);
+}
+
 function cardHTML(l, i) {
   const p = PLATFORMS.find(x=>x.id===l.platform) || {color:'#666', icon:'🚐', label:l.platform};
   const isSaved = state.saved.includes(l.id);
   const delay = Math.min(i*0.05, 0.5);
+  const c5 = isClass5(l);
   const imgContent = l.imgUrl
     ? `<img src="${l.imgUrl}" alt="${l.title}" loading="lazy" onerror="this.style.display='none'">`
     : `<div class="img-placeholder">${l.image||'🚌'}</div>`;
   return `
-  <div class="listing-card ${l.isNew?'is-new':''}" style="animation-delay:${delay}s">
+  <div class="listing-card ${l.isNew?'is-new':''} ${c5?'has-class5':''}" style="animation-delay:${delay}s">
+    ${c5 ? `<div class="class5-banner">CLASS 5 / PSV CERTIFIED — CONFIRMED IN LISTING</div>` : ''}
     <a href="${l.url}" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;color:inherit">
       <div class="card-image">
         ${imgContent}
@@ -564,6 +673,7 @@ function cardHTML(l, i) {
         ${l.year?`<span class="tag">${l.year}</span>`:''}
         ${l.mileage?`<span class="tag">${l.mileage} mi</span>`:''}
         ${l.seats?`<span class="tag highlight">${l.seats} seats</span>`:''}
+        ${c5?`<span class="tag class5-tag">✓ CLASS 5 / PSV</span>`:''}
         ${l.location?`<span class="tag">📍 ${l.location}</span>`:''}
       </div>
       <div class="card-footer">
@@ -581,6 +691,66 @@ function cardHTML(l, i) {
 function openListing(url) {
   if (!url) return;
   window.location.href = url;
+}
+
+// ══ CLASS 5 MODAL ══
+function showClass5Modal(totalCount) {
+  const existing = document.getElementById('class5Modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'class5Modal';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-handle"></div>
+      <div class="modal-icon">⚠️</div>
+      <div class="modal-title">No Class 5 / PSV Listings Found</div>
+      <div class="modal-body">
+        We found <strong>${totalCount} minibus listing${totalCount!==1?'s':''}</strong> but none specifically mention
+        <strong>Class 5, PSV certificate or D1</strong> in the title.<br><br>
+        Many sellers don't include this in the title — the vehicle may still qualify.
+        Would you like to see all results, or expand to search the <strong>whole UK</strong>?
+      </div>
+      <button class="modal-btn-primary" onclick="showAllResults()">
+        📋 Show All ${totalCount} Listings Anyway
+      </button>
+      <button class="modal-btn-secondary" onclick="searchWholeUK()">
+        🇬🇧 Search Whole UK (More Results)
+      </button>
+      <button class="modal-btn-dismiss" onclick="dismissClass5Modal()">
+        Dismiss — I'll check manually
+      </button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function showAllResults() {
+  dismissClass5Modal();
+  // Already showing all — just scroll to top
+  document.getElementById('panel-listings').scrollTop = 0;
+}
+
+function searchWholeUK() {
+  dismissClass5Modal();
+  state.settings.wholeUK = true;
+  state.settings.keyword = '';
+  localStorage.setItem('vf_settings', JSON.stringify(state.settings));
+  // Update the toggle UI if settings are open
+  const toggle = document.getElementById('ukToggle');
+  if (toggle) { toggle.classList.add('on'); toggle.classList.remove('off'); }
+  doRefresh();
+}
+
+function dismissClass5Modal() {
+  const modal = document.getElementById('class5Modal');
+  if (modal) modal.remove();
+}
+
+// ══ WHOLE UK TOGGLE ══
+function toggleUK(el) {
+  state.settings.wholeUK = !state.settings.wholeUK;
+  el.classList.toggle('on', state.settings.wholeUK);
+  el.classList.toggle('off', !state.settings.wholeUK);
 }
 
 // ══ SAVED ══
@@ -634,6 +804,11 @@ function loadSettings() {
   document.getElementById('settingMaxSeats').value = s.maxSeats || 17;
   document.getElementById('settingKeyword').value = s.keyword || '';
   document.getElementById('settingApi').value = s.apiUrl || '';
+  const ukToggle = document.getElementById('ukToggle');
+  if (ukToggle) {
+    ukToggle.classList.toggle('on', !!s.wholeUK);
+    ukToggle.classList.toggle('off', !s.wholeUK);
+  }
 }
 function updatePrice(val) {
   document.getElementById('priceDisplay').textContent = `£${Number(val).toLocaleString()}`;
@@ -646,6 +821,7 @@ function applySettings() {
     maxSeats: parseInt(document.getElementById('settingMaxSeats').value),
     keyword: document.getElementById('settingKeyword').value.trim(),
     apiUrl: document.getElementById('settingApi').value.trim(),
+    wholeUK: document.getElementById('ukToggle').classList.contains('on'),
     platforms: Array.from(document.querySelectorAll('.platform-chip.on')).map(el=>el.dataset.id),
   };
   localStorage.setItem('vf_settings', JSON.stringify(state.settings));
