@@ -550,13 +550,17 @@ function cardHTML(l, i) {
     : `<div class="img-placeholder">${l.image||'🚌'}</div>`;
   return `
   <div class="listing-card ${l.isNew?'is-new':''}" style="animation-delay:${delay}s">
-    <a class="btn-view" href="${l.url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">View →</a>
-      ${imgContent}
-      ${l.isNew?'<div class="card-new-label">NEW</div>':''}
-      <div class="card-platform-badge" style="background:${p.color}">${p.icon} ${p.label}</div>
-    </div>
+    <a href="${l.url}" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;color:inherit">
+      <div class="card-image">
+        ${imgContent}
+        ${l.isNew?'<div class="card-new-label">NEW</div>':''}
+        <div class="card-platform-badge" style="background:${p.color}">${p.icon} ${p.label}</div>
+      </div>
+    </a>
     <div class="card-body">
-      <div class="card-title" onclick="openListing('${l.url}')">${l.title}</div>
+      <a href="${l.url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit">
+        <div class="card-title">${l.title}</div>
+      </a>
       <div class="card-tags">
         ${l.year?`<span class="tag">${l.year}</span>`:''}
         ${l.mileage?`<span class="tag">${l.mileage} mi</span>`:''}
@@ -567,8 +571,8 @@ function cardHTML(l, i) {
         <div class="card-price">£${Number(l.price).toLocaleString()}</div>
         <div class="card-actions">
           <span class="card-age">${l.age||''}</span>
-          <button class="btn-save" onclick="toggleSave('${l.id}',this)" title="${isSaved?'Unsave':'Save'}">${isSaved?'🔖':'🔖'}</button>
-          <a class="btn-view" href="${l.url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">View →</a>
+          <button class="btn-save" onclick="toggleSave('${l.id}',this);event.stopPropagation();" title="${isSaved?'Unsave':'Save'}">${isSaved?'🔖':'🔖'}</button>
+          <a href="${l.url}" target="_blank" rel="noopener noreferrer" class="btn-view" style="text-decoration:none">View →</a>
         </div>
       </div>
     </div>
@@ -577,13 +581,7 @@ function cardHTML(l, i) {
 
 function openListing(url) {
   if (!url) return;
-  const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  window.location.href = url;
 }
 
 // ══ SAVED ══
