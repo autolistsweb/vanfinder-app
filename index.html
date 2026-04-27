@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="BusFinder"/>
+<meta name="theme-color" content="#0A0A0F"/>
+<link rel="apple-touch-icon" href="icon.png"/>
+<link rel="manifest" href="manifest.json"/>
+<title>MiniBus Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<style>
+:root {
+  --bg: #08080E;
+  --surface: #101018;
+  --surface2: #181825;
+  --border: #1E1E30;
+  --accent: #FF5C1A;
+  --accent2: #FF8C4A;
+  --text: #F0F0F8;
+  --muted: #666680;
+  --dim: #333348;
+  --green: #1DB97A;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { background: var(--bg); }
+body {
+  font-family: 'Syne', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  max-width: 430px;
+  margin: 0 auto;
+  overflow-x: hidden;
+  position: relative;
+}
+body::before {
+  content: '';
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: 430px; height: 300px; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse at 50% -20%, rgba(255,92,26,0.12) 0%, transparent 70%);
+}
+
+/* ── HEADER ── */
+.header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,8,14,0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: calc(var(--safe-top) + 14px) 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.header-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.brand-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 3px; }
+.brand-title { font-size: 22px; font-weight: 800; line-height: 1; }
+.brand-title span { color: var(--accent); }
+.header-meta { text-align: right; }
+.next-scan { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); line-height: 1.6; }
+.next-scan strong { color: var(--text); font-size: 12px; }
+.new-badge {
+  display: inline-block; background: var(--accent); color: white;
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  padding: 2px 8px; border-radius: 20px; margin-bottom: 4px;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+
+/* ── ACTION BAR ── */
+.action-bar { display: flex; gap: 8px; }
+.btn-refresh {
+  flex: 1; background: var(--accent); border: none; border-radius: 12px;
+  padding: 11px 0; color: white; font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 700; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; gap: 6px; transition: all 0.2s;
+}
+.btn-refresh:active { transform: scale(0.97); }
+.btn-refresh.scanning { background: var(--surface2); color: var(--muted); }
+.spin { display: inline-block; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-icon {
+  width: 42px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text); font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+}
+.btn-icon:active { transform: scale(0.95); }
+.btn-icon.active { background: var(--accent); border-color: var(--accent); }
+
+/* ── TABS ── */
+.tabs {
+  display: flex; border-bottom: 1px solid var(--border);
+  background: var(--bg); position: sticky; top: var(--header-h, 120px); z-index: 90;
+}
+.tab {
+  flex: 1; padding: 11px 0; background: none; border: none;
+  color: var(--muted); font-family: 'Syne', sans-serif; font-size: 12px;
+  font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── STATUS BAR ── */
+.status-bar {
+  padding: 6px 16px; display: flex; justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 4px; animation: pulse 2s infinite; }
+
+/* ── LISTINGS ── */
+.listings { padding: 12px 14px 120px; }
+.listing-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; margin-bottom: 12px; overflow: hidden;
+  animation: fadeUp 0.4s ease both;
+  transition: border-color 0.2s;
+}
+.listing-card.is-new { border-color: var(--accent); }
+.listing-card:active { opacity: 0.9; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.card-image {
+  height: 130px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; position: relative; overflow: hidden;
+  background: linear-gradient(135deg, var(--surface2) 0%, var(--bg) 100%);
+}
+.card-image img { width: 100%; height: 100%; object-fit: cover; }
+.card-image .img-placeholder { font-size: 60px; opacity: 0.4; }
+.card-platform-badge {
+  position: absolute; bottom: 8px; right: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  padding: 3px 8px; border-radius: 8px; color: white; font-weight: 500;
+}
+.card-new-label {
+  position: absolute; top: 8px; left: 8px;
+  background: var(--accent); color: white; font-size: 10px;
+  font-family: 'JetBrains Mono', monospace; padding: 2px 8px; border-radius: 8px;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+.card-body { padding: 12px 14px 14px; }
+.card-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; line-height: 1.3; cursor: pointer; }
+.card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.tag {
+  background: var(--surface2); font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; padding: 3px 8px; border-radius: 6px; color: var(--muted);
+}
+.tag.highlight { background: rgba(255,92,26,0.12); color: var(--accent); }
+.card-footer { display: flex; justify-content: space-between; align-items: center; }
+.card-price { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; }
+.card-actions { display: flex; align-items: center; gap: 8px; }
+.card-age { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+.btn-save { background: none; border: none; font-size: 18px; cursor: pointer; padding: 2px; }
+.btn-view {
+  background: var(--accent); border: none; border-radius: 10px;
+  padding: 7px 14px; color: white; font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+}
+.btn-view:active { transform: scale(0.95); }
+
+/* ── SETTINGS PANEL ── */
+.settings-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  backdrop-filter: blur(4px);
+}
+.settings-overlay.open { opacity: 1; pointer-events: all; }
+.settings-panel {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%);
+  width: 100%; max-width: 430px; background: var(--surface);
+  border-radius: 24px 24px 0 0; z-index: 201; padding: 0 0 calc(var(--safe-bot) + 20px);
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  max-height: 90vh; overflow-y: auto;
+}
+.settings-panel.open { transform: translateX(-50%) translateY(0); }
+.settings-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 14px auto 0; }
+.settings-title { text-align: center; font-size: 16px; font-weight: 800; padding: 14px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.settings-body { padding: 0 18px; }
+.setting-group { margin-bottom: 20px; }
+.setting-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; display: block; }
+.setting-input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 11px 14px; color: var(--text);
+  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  outline: none; transition: border-color 0.2s;
+}
+.setting-input:focus { border-color: var(--accent); }
+.setting-row { display: flex; gap: 8px; }
+.setting-row .setting-input { flex: 1; }
+.price-display { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); font-weight: 700; margin-bottom: 8px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+.platform-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.platform-chip {
+  padding: 7px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+  border: 1.5px solid var(--border); background: transparent; color: var(--muted);
+  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px;
+}
+.platform-chip.on { color: white; }
+
+.btn-apply {
+  width: 100%; background: var(--accent); border: none; border-radius: 14px;
+  padding: 14px; color: white; font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 800; cursor: pointer; margin-top: 8px;
+  transition: all 0.2s;
+}
+.btn-apply:active { transform: scale(0.98); }
+
+/* ── INSTALL PANEL ── */
+.install-panel { padding: 20px 18px; }
+.install-step {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.install-step:last-child { border-bottom: none; }
+.step-num {
+  width: 30px; height: 30px; border-radius: 50%; background: var(--accent);
+  color: white; display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700;
+  flex-shrink: 0;
+}
+.step-text { font-size: 13px; line-height: 1.5; color: var(--muted); }
+.step-text strong { color: var(--text); }
+.whatsapp-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; background: #25D366; border: none; border-radius: 14px;
+  padding: 14px; color: white; font-family: 'Syne', sans-serif;
+  font-size: 16px; font-weight: 800; cursor: pointer; margin-top: 16px;
+  transition: all 0.2s;
+}
+.whatsapp-btn:active { transform: scale(0.98); }
+
+/* ── ALERTS TAB ── */
+.alerts-panel { padding: 16px 14px 120px; }
+.alert-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px; margin-bottom: 10px;
+}
+.alert-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.alert-title { font-size: 13px; font-weight: 700; }
+.toggle-track {
+  width: 46px; height: 26px; border-radius: 13px; position: relative;
+  cursor: pointer; transition: background 0.3s;
+}
+.toggle-track.on { background: var(--accent); }
+.toggle-track.off { background: var(--dim); }
+.toggle-thumb {
+  width: 20px; height: 20px; background: white; border-radius: 50%;
+  position: absolute; top: 3px; transition: left 0.3s;
+}
+.toggle-track.on .toggle-thumb { left: 23px; }
+.toggle-track.off .toggle-thumb { left: 3px; }
+
+.alert-log { margin-top: 16px; }
+.alert-log-title { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; }
+.log-item { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); display: flex; gap: 8px; }
+.log-item:last-child { border: none; }
+.log-dot { color: var(--accent); flex-shrink: 0; }
+
+/* ── EMPTY STATE ── */
+.empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+.empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+.empty-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+.empty-sub { font-size: 13px; line-height: 1.5; }
+
+/* ── SCANNING OVERLAY ── */
+.scan-anim {
+  text-align: center; padding: 50px 20px;
+}
+.scan-ring {
+  width: 60px; height: 60px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  margin: 0 auto 16px; animation: spin 1s linear infinite;
+}
+.scan-platforms { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+.scan-badge {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border);
+  color: var(--muted); animation: blink 1.4s ease infinite;
+}
+@keyframes blink { 0%,100%{opacity:0.4} 50%{opacity:1} }
+.scan-badge:nth-child(1){animation-delay:0s}
+.scan-badge:nth-child(2){animation-delay:0.2s}
+.scan-badge:nth-child(3){animation-delay:0.4s}
+.scan-badge:nth-child(4){animation-delay:0.6s}
+.scan-badge:nth-child(5){animation-delay:0.8s}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div class="header" id="appHeader">
+  <div class="header-top">
+    <div>
+      <div class="brand-label">Class 5 · UK</div>
+      <div class="brand-title">MiniBus<span>Finder</span></div>
+    </div>
+    <div class="header-meta" id="headerMeta">
+      <div class="next-scan">Next scan<br><strong id="countdown">2h 00m 00s</strong></div>
+    </div>
+  </div>
+  <div class="action-bar">
+    <button class="btn-refresh" id="btnRefresh" onclick="doRefresh()">
+      <span id="refreshIcon">↻</span>
+      <span id="refreshLabel">Scan All Platforms</span>
+    </button>
+    <button class="btn-icon" onclick="openSettings()" title="Search settings">⚙</button>
+    <button class="btn-icon" onclick="showTab('install')" title="Share &amp; Install">⬆</button>
+  </div>
+</div>
+
+<!-- ══ TABS ══ -->
+<div class="tabs">
+  <button class="tab active" id="tab-listings" onclick="showTab('listings')">Listings <span id="listCount">(0)</span></button>
+  <button class="tab" id="tab-saved" onclick="showTab('saved')">Saved <span id="savedCount">(0)</span></button>
+  <button class="tab" id="tab-alerts" onclick="showTab('alerts')">Alerts</button>
+  <button class="tab" id="tab-install" onclick="showTab('install')">Install</button>
+</div>
+
+<!-- ══ STATUS BAR ══ -->
+<div class="status-bar">
+  <span><span class="status-dot"></span><span id="statusText">Ready to scan</span></span>
+  <span id="lastScanText" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">Not yet scanned</span>
+</div>
+
+<!-- ══ CONTENT PANELS ══ -->
+<div id="panel-listings" class="listings"></div>
+<div id="panel-saved" class="listings" style="display:none"></div>
+<div id="panel-alerts" class="alerts-panel" style="display:none"></div>
+<div id="panel-install" style="display:none"></div>
+
+<!-- ══ SETTINGS OVERLAY ══ -->
+<div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
+<div class="settings-panel" id="settingsPanel">
+  <div class="settings-handle"></div>
+  <div class="settings-title">Search Settings</div>
+  <div class="settings-body">
+
+    <div class="setting-group">
+      <span class="setting-label">Your Postcode</span>
+      <input class="setting-input" id="settingPostcode" type="text" placeholder="e.g. BB9 7TZ" maxlength="8"/>
+    </div>
+
+    <div class="setting-group">
+      <span class="setting-label">Max Price: <span id="priceDisplay" style="color:var(--accent)">£5,000</span></span>
+      <input type="range" id="settingPrice" min="500" max="10000" step="250" value="5000" oninput="updatePrice(this.value)"/>
+    </div>
+
+    <div class="setting-group">
+      <span class="setting-label">Seats</span>
+      <div class="setting-row">
+        <input class="setting-input" id="settingMinSeats" type="number" placeholder="Min (e.g. 15)" value="17" min="8" max="30"/>
+        <input class="setting-input" id="settingMaxSeats" type="number" placeholder="Max (e.g. 17)" value="17" min="8" max="30"/>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <span class="setting-label">Keyword Filter (optional)</span>
+      <input class="setting-input" id="settingKeyword" type="text" placeholder="e.g. PSV, D1, Ford Transit"/>
+    </div>
+
+    <div class="setting-group">
+      <span class="setting-label">Backend API URL</span>
+      <input class="setting-input" id="settingApi" type="text" placeholder="https://your-app.railway.app"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">See SETUP.md for free hosting instructions</div>
+    </div>
+
+    <div class="setting-group">
+      <span class="setting-label">Platforms</span>
+      <div class="platform-grid" id="platformGrid"></div>
+    </div>
+
+    <button class="btn-apply" onclick="applySettings()">Apply & Search</button>
+    <div style="height:8px"></div>
+  </div>
+</div>
+
+<script>
+// ══ PLATFORM CONFIG ══
+const PLATFORMS = [
+  {id:'autotrader', label:'AutoTrader', icon:'🚗', color:'#FF6B35'},
+  {id:'gumtree',    label:'Gumtree',    icon:'🌳', color:'#1DB954'},
+  {id:'ebay',       label:'eBay Motors',icon:'🏷️', color:'#E53238'},
+  {id:'motors',     label:'Motors.co.uk',icon:'⚙️',color:'#003087'},
+  {id:'preloved',   label:'Preloved',   icon:'💜', color:'#9B59B6'},
+  {id:'shpock',     label:'Shpock',     icon:'📦', color:'#00BFA5'},
+  {id:'facebook',   label:'Facebook MP',icon:'📘', color:'#1877F2'},
+];
+
+// ══ STATE ══
+let state = {
+  listings: [],
+  saved: JSON.parse(localStorage.getItem('vf_saved') || '[]'),
+  alerts: JSON.parse(localStorage.getItem('vf_alerts') || '{"autoRefresh":true,"newListings":true,"priceDrops":true}'),
+  settings: JSON.parse(localStorage.getItem('vf_settings') || JSON.stringify({
+    postcode: 'BB97TZ', maxPrice: 5000, minSeats: 17, maxSeats: 17,
+    keyword: '', apiUrl: '', platforms: PLATFORMS.map(p=>p.id)
+  })),
+  activeTab: 'listings',
+  scanning: false,
+  seenIds: JSON.parse(localStorage.getItem('vf_seen') || '[]'),
+  scanLog: JSON.parse(localStorage.getItem('vf_log') || '[]'),
+  nextScan: Date.now() + 7200000,
+};
+
+// ══ INIT ══
+document.addEventListener('DOMContentLoaded', () => {
+  buildPlatformGrid();
+  loadSettings();
+  buildAlertsPanel();
+  buildInstallPanel();
+  renderListings();
+  renderSaved();
+  startCountdown();
+  if (state.settings.apiUrl) doRefresh();
+});
+
+// ══ COUNTDOWN ══
+function startCountdown() {
+  setInterval(() => {
+    const diff = Math.max(0, state.nextScan - Date.now());
+    if (diff === 0 && !state.scanning && state.alerts.autoRefresh) {
+      doRefresh();
+    }
+    const h = Math.floor(diff/3600000);
+    const m = Math.floor((diff%3600000)/60000);
+    const s = Math.floor((diff%60000)/1000);
+    document.getElementById('countdown').textContent =
+      `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+  }, 1000);
+}
+
+// ══ REFRESH / SCAN ══
+async function doRefresh() {
+  if (state.scanning) return;
+  state.scanning = true;
+  const btn = document.getElementById('btnRefresh');
+  const icon = document.getElementById('refreshIcon');
+  const label = document.getElementById('refreshLabel');
+  btn.classList.add('scanning');
+  icon.className = 'spin'; icon.textContent = '↻';
+  label.textContent = 'Scanning…';
+  document.getElementById('statusText').textContent = 'Scanning platforms…';
+  showScanAnimation();
+
+  try {
+    const s = state.settings;
+    const url = s.apiUrl
+      ? `${s.apiUrl.replace(/\/$/,'')}/api/listings?postcode=${encodeURIComponent(s.postcode)}&maxPrice=${s.maxPrice}&minSeats=${s.minSeats}&maxSeats=${s.maxSeats}&keyword=${encodeURIComponent(s.keyword)}&platforms=${s.platforms.join(',')}`
+      : null;
+
+    let listings = [];
+    if (url) {
+      const res = await fetch(url, {signal: AbortSignal.timeout(30000)});
+      if (res.ok) {
+        const data = await res.json();
+        listings = data.listings || [];
+      }
+    } else {
+      listings = getDemoListings();
+    }
+
+    // Mark new ones
+    const newIds = listings.filter(l => !state.seenIds.includes(l.id)).map(l=>l.id);
+    listings = listings.map(l => ({...l, isNew: newIds.includes(l.id)}));
+    state.seenIds = [...new Set([...state.seenIds, ...listings.map(l=>l.id)])];
+    localStorage.setItem('vf_seen', JSON.stringify(state.seenIds.slice(-500)));
+
+    state.listings = listings;
+    state.nextScan = Date.now() + 7200000;
+
+    const now = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('lastScanText').textContent = `Scanned ${now}`;
+    document.getElementById('statusText').textContent = `${listings.length} listings found`;
+
+    if (newIds.length > 0) {
+      const meta = document.getElementById('headerMeta');
+      meta.innerHTML = `<div class="new-badge">${newIds.length} NEW</div><div class="next-scan">Next scan<br><strong id="countdown">2h 00m 00s</strong></div>`;
+    }
+
+    addLog(`Found ${listings.length} listings (${newIds.length} new) at ${now}`);
+    renderListings();
+
+  } catch(e) {
+    document.getElementById('statusText').textContent = url ? 'Scan failed — check API URL' : 'Demo mode (set API URL in settings)';
+    state.listings = getDemoListings();
+    renderListings();
+  }
+
+  state.scanning = false;
+  btn.classList.remove('scanning');
+  icon.className = ''; icon.textContent = '↻';
+  label.textContent = 'Scan All Platforms';
+}
+
+// ══ DEMO LISTINGS (shown when no backend) ══
+function getDemoListings() {
+  return [
+    {id:'at1',platform:'autotrader',title:'Ford Transit 2.2 TDCi 460 HDT Minibus',price:4750,year:2013,mileage:'140,000',location:'Bristol',seats:17,url:'https://www.autotrader.co.uk/car-search?body-type=Minibus&maximum-seats=17&minimum-seats=17&price-to=5000',image:'🚌',age:'3h ago'},
+    {id:'at2',platform:'autotrader',title:'Ford Transit 2.4 TDCi 430 Duratorq Minibus',price:4449,year:2008,mileage:'60,000',location:'Wembley',seats:17,url:'https://www.autotrader.co.uk/car-search?body-type=Minibus&maximum-seats=17&minimum-seats=17&price-to=5000',image:'🚐',age:'5h ago'},
+    {id:'at3',platform:'autotrader',title:'Ford Transit 2.4 TDI 17 Seat Minibus',price:3600,year:2005,mileage:'125,000',location:'Tamworth',seats:17,url:'https://www.autotrader.co.uk/car-search?body-type=Minibus&maximum-seats=17&minimum-seats=17&price-to=5000',image:'🚌',age:'12h ago'},
+    {id:'at4',platform:'autotrader',title:'Ford Transit 2.4 TDCi Minibus',price:4000,year:2010,mileage:'59,909',location:'Bangor',seats:17,url:'https://www.autotrader.co.uk/car-search?body-type=Minibus&maximum-seats=17&minimum-seats=17&price-to=5000',image:'🚐',age:'1d ago'},
+    {id:'at5',platform:'autotrader',title:'Ford Transit 2.2 TDCi 430 HDT Minibus',price:2775,year:2012,mileage:'165,000',location:'Hendon',seats:17,url:'https://www.autotrader.co.uk/car-search?body-type=Minibus&maximum-seats=17&minimum-seats=17&price-to=5000',image:'🚌',age:'2d ago'},
+    {id:'gt1',platform:'gumtree',title:'Ford Transit 460 17 Seater PSV MOT',price:3200,year:2009,mileage:'130,000',location:'Hinckley',seats:17,url:'https://www.gumtree.com/cars-vans-motorbikes/uk/17+seat+minibus?max_price=5000',image:'🚐',age:'6h ago'},
+    {id:'eb1',platform:'ebay',title:'Ford Transit 17 Seat Minibus — Auction',price:4100,year:2011,mileage:'98,000',location:'Leeds',seats:17,url:'https://www.ebay.co.uk/sch/i.html?_nkw=17+seat+minibus&_sacat=9858&_udhi=5000',image:'🚌',age:'2d ago'},
+  ];
+}
+
+// ══ RENDER LISTINGS ══
+function renderListings() {
+  const el = document.getElementById('panel-listings');
+  const s = state.settings;
+  let list = state.listings.filter(l => s.platforms.includes(l.platform));
+  if (s.keyword) {
+    const kw = s.keyword.toLowerCase();
+    list = list.filter(l => l.title.toLowerCase().includes(kw) || (l.location||'').toLowerCase().includes(kw));
+  }
+  document.getElementById('listCount').textContent = `(${list.length})`;
+
+  if (state.scanning) { el.innerHTML = scanAnimHTML(); return; }
+  if (!list.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No listings yet</div><div class="empty-sub">Tap "Scan All Platforms" to search,<br>or set your API URL in Settings ⚙</div></div>`;
+    return;
+  }
+  el.innerHTML = list.map((l,i) => cardHTML(l, i)).join('');
+}
+
+function showScanAnimation() {
+  const el = document.getElementById('panel-listings');
+  el.innerHTML = scanAnimHTML();
+}
+
+function scanAnimHTML() {
+  const active = state.settings.platforms;
+  const badges = PLATFORMS.filter(p=>active.includes(p.id)).map(p=>`<div class="scan-badge">${p.icon} ${p.label}</div>`).join('');
+  return `<div class="scan-anim"><div class="scan-ring"></div><div style="font-size:14px;font-weight:700;margin-bottom:6px">Scanning platforms…</div><div style="font-size:12px;color:var(--muted);margin-bottom:14px">Searching for 17-seat minibuses under £${Number(state.settings.maxPrice).toLocaleString()}</div><div class="scan-platforms">${badges}</div></div>`;
+}
+
+function cardHTML(l, i) {
+  const p = PLATFORMS.find(x=>x.id===l.platform) || {color:'#666', icon:'🚐', label:l.platform};
+  const isSaved = state.saved.includes(l.id);
+  const delay = Math.min(i*0.05, 0.5);
+  const imgContent = l.imgUrl
+    ? `<img src="${l.imgUrl}" alt="${l.title}" loading="lazy" onerror="this.style.display='none'">`
+    : `<div class="img-placeholder">${l.image||'🚌'}</div>`;
+  return `
+  <div class="listing-card ${l.isNew?'is-new':''}" style="animation-delay:${delay}s">
+    <div class="card-image" onclick="openListing('${l.url}')">
+      ${imgContent}
+      ${l.isNew?'<div class="card-new-label">NEW</div>':''}
+      <div class="card-platform-badge" style="background:${p.color}">${p.icon} ${p.label}</div>
+    </div>
+    <div class="card-body">
+      <div class="card-title" onclick="openListing('${l.url}')">${l.title}</div>
+      <div class="card-tags">
+        ${l.year?`<span class="tag">${l.year}</span>`:''}
+        ${l.mileage?`<span class="tag">${l.mileage} mi</span>`:''}
+        ${l.seats?`<span class="tag highlight">${l.seats} seats</span>`:''}
+        ${l.location?`<span class="tag">📍 ${l.location}</span>`:''}
+      </div>
+      <div class="card-footer">
+        <div class="card-price">£${Number(l.price).toLocaleString()}</div>
+        <div class="card-actions">
+          <span class="card-age">${l.age||''}</span>
+          <button class="btn-save" onclick="toggleSave('${l.id}',this)" title="${isSaved?'Unsave':'Save'}">${isSaved?'🔖':'🔖'}</button>
+          <button class="btn-view" onclick="openListing('${l.url}')">View →</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openListing(url) {
+  window.open(url, '_blank');
+}
+
+// ══ SAVED ══
+function renderSaved() {
+  const el = document.getElementById('panel-saved');
+  const list = state.listings.filter(l => state.saved.includes(l.id));
+  document.getElementById('savedCount').textContent = `(${state.saved.length})`;
+  if (!list.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔖</div><div class="empty-title">No saved listings</div><div class="empty-sub">Tap the bookmark icon on any listing to save it</div></div>`;
+    return;
+  }
+  el.innerHTML = list.map((l,i) => cardHTML(l,i)).join('');
+}
+
+function toggleSave(id, btn) {
+  if (state.saved.includes(id)) {
+    state.saved = state.saved.filter(x=>x!==id);
+  } else {
+    state.saved.push(id);
+  }
+  localStorage.setItem('vf_saved', JSON.stringify(state.saved));
+  document.getElementById('savedCount').textContent = `(${state.saved.length})`;
+  renderSaved();
+}
+
+// ══ TABS ══
+function showTab(name) {
+  ['listings','saved','alerts','install'].forEach(t => {
+    document.getElementById(`panel-${t}`).style.display = t===name?'block':'none';
+    const tb = document.getElementById(`tab-${t}`);
+    if (tb) tb.classList.toggle('active', t===name);
+  });
+  state.activeTab = name;
+}
+
+// ══ SETTINGS ══
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.add('open');
+  document.getElementById('settingsPanel').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+  document.getElementById('settingsPanel').classList.remove('open');
+}
+function loadSettings() {
+  const s = state.settings;
+  document.getElementById('settingPostcode').value = s.postcode || '';
+  document.getElementById('settingPrice').value = s.maxPrice || 5000;
+  document.getElementById('priceDisplay').textContent = `£${Number(s.maxPrice||5000).toLocaleString()}`;
+  document.getElementById('settingMinSeats').value = s.minSeats || 17;
+  document.getElementById('settingMaxSeats').value = s.maxSeats || 17;
+  document.getElementById('settingKeyword').value = s.keyword || '';
+  document.getElementById('settingApi').value = s.apiUrl || '';
+}
+function updatePrice(val) {
+  document.getElementById('priceDisplay').textContent = `£${Number(val).toLocaleString()}`;
+}
+function applySettings() {
+  state.settings = {
+    postcode: document.getElementById('settingPostcode').value.replace(/\s/g,'').toUpperCase() || 'BB97TZ',
+    maxPrice: parseInt(document.getElementById('settingPrice').value),
+    minSeats: parseInt(document.getElementById('settingMinSeats').value),
+    maxSeats: parseInt(document.getElementById('settingMaxSeats').value),
+    keyword: document.getElementById('settingKeyword').value.trim(),
+    apiUrl: document.getElementById('settingApi').value.trim(),
+    platforms: Array.from(document.querySelectorAll('.platform-chip.on')).map(el=>el.dataset.id),
+  };
+  localStorage.setItem('vf_settings', JSON.stringify(state.settings));
+  closeSettings();
+  showTab('listings');
+  doRefresh();
+}
+function buildPlatformGrid() {
+  const grid = document.getElementById('platformGrid');
+  const active = state.settings.platforms;
+  grid.innerHTML = PLATFORMS.map(p => `
+    <div class="platform-chip ${active.includes(p.id)?'on':''}"
+      data-id="${p.id}"
+      style="${active.includes(p.id)?`border-color:${p.color};background:${p.color}22;color:${p.color}`:''}"
+      onclick="togglePlatform(this,'${p.color}')">
+      ${p.icon} ${p.label}
+    </div>`).join('');
+}
+function togglePlatform(el, color) {
+  el.classList.toggle('on');
+  if (el.classList.contains('on')) {
+    el.style.borderColor = color; el.style.background = color+'22'; el.style.color = color;
+  } else {
+    el.style.borderColor = ''; el.style.background = ''; el.style.color = '';
+  }
+}
+
+// ══ ALERTS PANEL ══
+function buildAlertsPanel() {
+  const el = document.getElementById('panel-alerts');
+  el.innerHTML = `
+  <div class="alert-card">
+    <div class="alert-header"><span class="alert-title">⏱ Auto-scan every 2 hours</span><div class="toggle-track ${state.alerts.autoRefresh?'on':'off'}" onclick="toggleAlert('autoRefresh',this)"><div class="toggle-thumb"></div></div></div>
+    <div style="font-size:12px;color:var(--muted)">App automatically scans all platforms while open</div>
+  </div>
+  <div class="alert-card">
+    <div class="alert-header"><span class="alert-title">🔔 New listings found</span><div class="toggle-track ${state.alerts.newListings?'on':'off'}" onclick="toggleAlert('newListings',this)"><div class="toggle-thumb"></div></div></div>
+    <div style="font-size:12px;color:var(--muted)">Badge appears when new vehicles are found</div>
+  </div>
+  <div class="alert-card">
+    <div class="alert-header"><span class="alert-title">💷 Price drops</span><div class="toggle-track ${state.alerts.priceDrops?'on':'off'}" onclick="toggleAlert('priceDrops',this)"><div class="toggle-thumb"></div></div></div>
+    <div style="font-size:12px;color:var(--muted)">Get notified when a saved listing drops in price</div>
+  </div>
+  <div class="alert-card alert-log">
+    <div class="alert-log-title">Scan History</div>
+    <div id="logItems">${renderLog()}</div>
+  </div>`;
+}
+function toggleAlert(key, el) {
+  state.alerts[key] = !state.alerts[key];
+  el.classList.toggle('on', state.alerts[key]);
+  el.classList.toggle('off', !state.alerts[key]);
+  localStorage.setItem('vf_alerts', JSON.stringify(state.alerts));
+}
+function addLog(msg) {
+  state.scanLog.unshift({msg, time: new Date().toLocaleTimeString()});
+  state.scanLog = state.scanLog.slice(0,20);
+  localStorage.setItem('vf_log', JSON.stringify(state.scanLog));
+  const logEl = document.getElementById('logItems');
+  if (logEl) logEl.innerHTML = renderLog();
+}
+function renderLog() {
+  if (!state.scanLog.length) return '<div class="log-item"><span class="log-dot">·</span> No scans yet</div>';
+  return state.scanLog.map(l=>`<div class="log-item"><span class="log-dot">·</span>${l.time} — ${l.msg}</div>`).join('');
+}
+
+// ══ INSTALL PANEL ══
+function buildInstallPanel() {
+  const el = document.getElementById('panel-install');
+  const appUrl = window.location.href;
+  el.innerHTML = `
+  <div class="install-panel">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px">Free iPhone Installation</div>
+
+    <div class="install-step">
+      <div class="step-num">1</div>
+      <div class="step-text"><strong>Share this link via WhatsApp</strong><br>Tap the green button below. Your contact receives a link — no app store needed.</div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">2</div>
+      <div class="step-text"><strong>Open link in Safari</strong><br>On iPhone, the link <em>must</em> be opened in <strong>Safari</strong> (not Chrome or the in-app browser). Long-press the link → Open in Safari.</div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">3</div>
+      <div class="step-text"><strong>Tap the Share button</strong><br>The box-with-arrow icon at the bottom of Safari.</div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">4</div>
+      <div class="step-text"><strong>Tap "Add to Home Screen"</strong><br>Scroll down in the share sheet. Name it "MiniBus Finder" and tap Add.</div>
+    </div>
+    <div class="install-step">
+      <div class="step-num">5</div>
+      <div class="step-text"><strong>Done!</strong><br>The app icon appears on the home screen. Opens full-screen like a native app, no browser bar.</div>
+    </div>
+
+    <button class="whatsapp-btn" onclick="shareWhatsApp()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Share via WhatsApp
+    </button>
+
+    <div style="margin-top:20px;padding:14px;background:var(--surface2);border-radius:14px;border:1px solid var(--border)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">App Link</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);word-break:break-all">${appUrl}</div>
+      <button onclick="copyLink('${appUrl}')" style="margin-top:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 14px;color:var(--text);font-size:12px;cursor:pointer;font-family:'Syne',sans-serif">Copy Link</button>
+    </div>
+  </div>`;
+}
+
+function shareWhatsApp() {
+  const url = encodeURIComponent(window.location.href);
+  const msg = encodeURIComponent(`🚌 MiniBus Finder – searches AutoTrader, Gumtree, eBay & more for 17-seat minibuses under £5,000. Open in Safari and add to your home screen!\n\n`);
+  window.open(`https://wa.me/?text=${msg}${url}`, '_blank');
+}
+
+function copyLink(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    alert('Link copied!');
+  }).catch(() => {
+    prompt('Copy this link:', url);
+  });
+}
+</script>
+
+<!-- ══ SERVICE WORKER ══ -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
