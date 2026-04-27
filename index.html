@@ -484,18 +484,17 @@ async function doRefresh() {
     }
 
     addLog(`Found ${listings.length} listings (${newIds.length} new) at ${now}`);
-    renderListings();
 
   } catch(e) {
     document.getElementById('statusText').textContent = url ? 'Scan failed — check API URL' : 'Demo mode (set API URL in settings)';
     state.listings = getDemoListings();
-    renderListings();
   }
 
   state.scanning = false;
   btn.classList.remove('scanning');
   icon.className = ''; icon.textContent = '↻';
   label.textContent = 'Scan All Platforms';
+  renderListings();
 }
 
 // ══ DEMO LISTINGS (shown when no backend) ══
