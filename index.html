@@ -684,7 +684,6 @@ function matchesKeyword(l, kw) {
   const text = `${l.title} ${l.description||''} ${l.location||''} ${l.note||''}`.toLowerCase();
   return text.includes(kw);
 }
-}
 
 function showScanAnimation() {
   const el = document.getElementById('panel-listings');
