@@ -211,6 +211,28 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 }
 .btn-apply:active { transform: scale(0.98); }
 
+/* ── BROWSE PORTAL CARD ── */
+.portal-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; margin-bottom: 8px; overflow: hidden;
+  animation: fadeUp 0.3s ease both;
+}
+.portal-inner {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  text-decoration: none; color: inherit;
+}
+.portal-icon { font-size: 28px; flex-shrink: 0; }
+.portal-text { flex: 1; }
+.portal-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+.portal-sub { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+.portal-arrow { font-size: 18px; color: var(--muted); flex-shrink: 0; }
+.portals-header {
+  padding: 8px 4px 6px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 2px;
+  border-top: 1px solid var(--border); margin: 8px 0;
+}
+
 /* ── INSTALL PANEL ── */
 .install-panel { padding: 20px 18px; }
 .install-step {
@@ -426,9 +448,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
     </div>
 
     <div class="setting-group">
-      <span class="setting-label">Keyword Filter (optional)</span>
+      <span class="setting-label">Keyword Highlight (optional)</span>
       <input class="setting-input" id="settingKeyword" type="text" placeholder="e.g. PSV, D1, Ford Transit"/>
-      <div style="font-size:11px;color:var(--muted);margin-top:5px">Leave blank for all results. App auto-detects Class 5 / PSV listings.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">Highlights matching listings at the top. All other results still shown below. Class 5 / PSV is always auto-detected separately.</div>
     </div>
 
     <div class="setting-group">
@@ -462,13 +484,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer;
 <script>
 // ══ PLATFORM CONFIG ══
 const PLATFORMS = [
-  {id:'autotrader', label:'AutoTrader', icon:'🚗', color:'#FF6B35'},
-  {id:'gumtree',    label:'Gumtree',    icon:'🌳', color:'#1DB954'},
-  {id:'ebay',       label:'eBay Motors',icon:'🏷️', color:'#E53238'},
-  {id:'motors',     label:'Motors.co.uk',icon:'⚙️',color:'#003087'},
-  {id:'preloved',   label:'Preloved',   icon:'💜', color:'#9B59B6'},
-  {id:'shpock',     label:'Shpock',     icon:'📦', color:'#00BFA5'},
-  {id:'facebook',   label:'Facebook MP',icon:'📘', color:'#1877F2'},
+  {id:'autotrader',     label:'AutoTrader',       icon:'🚗', color:'#FF6B35'},
+  {id:'gumtree',        label:'Gumtree',           icon:'🌳', color:'#1DB954'},
+  {id:'ebay',           label:'eBay Motors',       icon:'🏷️', color:'#E53238'},
+  {id:'buscoach',       label:'Bus & Coach Buyer', icon:'🚌', color:'#0066CC'},
+  {id:'cazoo',          label:'Cazoo',             icon:'🔵', color:'#00C2FF'},
+  {id:'motors',         label:'Motors.co.uk',      icon:'⚙️', color:'#003087'},
+  {id:'preloved',       label:'Preloved',          icon:'💜', color:'#9B59B6'},
+  {id:'commercialmotor',label:'Commercial Motor',  icon:'🔧', color:'#CC0000'},
+  {id:'shpock',         label:'Shpock',            icon:'📦', color:'#00BFA5'},
+  {id:'facebook',       label:'Facebook MP',       icon:'📘', color:'#1877F2'},
 ];
 
 // ══ STATE ══
@@ -478,7 +503,7 @@ let state = {
   alerts: JSON.parse(localStorage.getItem('vf_alerts') || '{"autoRefresh":true,"newListings":true,"priceDrops":true}'),
   settings: JSON.parse(localStorage.getItem('vf_settings') || JSON.stringify({
     postcode: 'BB97TZ', maxPrice: 5000, minSeats: 17, maxSeats: 17,
-    keyword: '', apiUrl: '', platforms: PLATFORMS.map(p=>p.id)
+    keyword: '', apiUrl: '', wholeUK: false, platforms: PLATFORMS.map(p=>p.id)
   })),
   activeTab: 'listings',
   scanning: false,
@@ -593,42 +618,72 @@ function getDemoListings() {
 // ══ RENDER LISTINGS ══
 function renderListings() {
   const el = document.getElementById('panel-listings');
-  const s = state.settings;
+  const s  = state.settings;
+  const kw = (s.keyword || '').toLowerCase().trim();
+
   let list = state.listings.filter(l => s.platforms.includes(l.platform));
-  if (s.keyword) {
-    const kw = s.keyword.toLowerCase();
-    list = list.filter(l => l.title.toLowerCase().includes(kw) || (l.location||'').toLowerCase().includes(kw));
-  }
-  document.getElementById('listCount').textContent = `(${list.length})`;
+
+  const realListings   = list.filter(l => !l.isDirect);
+  const portalListings = list.filter(l =>  l.isDirect);
+
+  document.getElementById('listCount').textContent = `(${realListings.length || list.length})`;
 
   if (state.scanning) { el.innerHTML = scanAnimHTML(); return; }
 
-  // Detect if we have listings but NONE are confirmed Class 5/PSV
-  const hasAnyListings = state.listings.length > 0;
-  const c5Listings = list.filter(l => isClass5(l));
-  const nonC5Listings = list.filter(l => !isClass5(l));
-
-  if (hasAnyListings && c5Listings.length === 0 && !state.class5ModalShown && !state.settings.wholeUK) {
-    state.class5ModalShown = true;
-    showClass5Modal(list.length);
-  }
-
   if (!list.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No listings yet</div><div class="empty-sub">Tap "Scan All Platforms" to search,<br>or set your API URL in Settings ⚙</div></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No listings yet</div><div class="empty-sub">Tap "Scan All Platforms" to search,<br>or check your API URL in Settings ⚙</div></div>`;
     return;
   }
 
-  // Sort: Class 5 confirmed listings FIRST, then the rest
-  const sorted = [...c5Listings, ...nonC5Listings];
+  // ── Classify real listings ────────────────────────────
+  // 1. Class 5 / PSV confirmed (green badge, always top)
+  // 2. Keyword match (if keyword set, shown second)
+  // 3. Everything else (shown below divider)
+  const c5Listings      = realListings.filter(l => isClass5(l) || l.isPSVSite);
+  const kwListings      = kw ? realListings.filter(l => !isClass5(l) && !l.isPSVSite && matchesKeyword(l, kw)) : [];
+  const otherListings   = realListings.filter(l => !isClass5(l) && !l.isPSVSite && (!kw || !matchesKeyword(l, kw)));
 
-  // Add a divider if we have both types
-  let html = sorted.map((l,i) => cardHTML(l,i)).join('');
-  if (c5Listings.length > 0 && nonC5Listings.length > 0) {
-    const divider = `<div style="padding:10px 4px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;border-top:1px solid var(--border);margin:4px 0">⬇ Other listings — Class 5 not confirmed in title</div>`;
-    html = c5Listings.map((l,i)=>cardHTML(l,i)).join('') + divider + nonC5Listings.map((l,i)=>cardHTML(l,i+c5Listings.length)).join('');
+  // Show Class 5 modal if needed
+  if (realListings.length > 0 && c5Listings.length === 0 && !state.class5ModalShown && !state.settings.wholeUK) {
+    state.class5ModalShown = true;
+    showClass5Modal(realListings.length);
+  }
+
+  let html = '';
+
+  // CLASS 5 / PSV confirmed listings
+  if (c5Listings.length) {
+    html += c5Listings.map((l,i) => cardHTML(l,i)).join('');
+  }
+
+  // Keyword matching listings (only if keyword is set)
+  if (kw && kwListings.length) {
+    html += `<div class="portals-header" style="color:#FF9500;border-color:#FF950040">🔍 Keyword match: "${s.keyword}"</div>`;
+    html += kwListings.map((l,i) => cardHTML(l, i + c5Listings.length, true)).join('');
+  }
+
+  // Divider before non-matching results
+  if (otherListings.length) {
+    const divLabel = kw
+      ? `⬇ All other listings — "${s.keyword}" not found in title (may still qualify)`
+      : (c5Listings.length > 0 ? `⬇ Other listings — Class 5 not confirmed in title` : '');
+    if (divLabel) html += `<div class="portals-header">${divLabel}</div>`;
+    html += otherListings.map((l,i) => cardHTML(l, i + c5Listings.length + kwListings.length)).join('');
+  }
+
+  // Browse portal cards at the bottom
+  if (portalListings.length) {
+    if (realListings.length > 0) html += `<div class="portals-header">🔗 Browse directly on these platforms</div>`;
+    html += portalListings.map(l => portalCardHTML(l)).join('');
   }
 
   el.innerHTML = html;
+}
+
+function matchesKeyword(l, kw) {
+  const text = `${l.title} ${l.description||''} ${l.location||''} ${l.note||''}`.toLowerCase();
+  return text.includes(kw);
+}
 }
 
 function showScanAnimation() {
@@ -643,8 +698,25 @@ function scanAnimHTML() {
 }
 
 function isClass5(listing) {
+  if (listing.isPSVSite) return true; // Bus & Coach Buyer is a PSV specialist site
   const text = `${listing.title} ${listing.description||''} ${listing.note||''}`.toLowerCase();
   return /class\s*5|psv|public service vehicle|d1\s*(licence|license|cert)|psv\s*mot|psv\s*pass|section\s*19/.test(text);
+}
+
+function portalCardHTML(l) {
+  const p = PLATFORMS.find(x => x.id === l.platform) || { color:'#666', icon:'🚐', label: l.platform };
+  return `
+  <div class="portal-card">
+    <a href="${l.url}" target="_blank" rel="noopener noreferrer" class="portal-inner">
+      <div class="portal-icon">${p.icon}</div>
+      <div class="portal-text">
+        <div class="portal-name" style="color:${p.color}">${p.label}</div>
+        <div class="portal-sub">Tap to search • Opens in browser</div>
+        ${l.note ? `<div class="portal-sub" style="color:#f59e0b;margin-top:2px">⚠ ${l.note}</div>` : ''}
+      </div>
+      <div class="portal-arrow">→</div>
+    </a>
+  </div>`;
 }
 
 function cardHTML(l, i) {
