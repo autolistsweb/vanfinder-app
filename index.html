@@ -550,7 +550,7 @@ function cardHTML(l, i) {
     : `<div class="img-placeholder">${l.image||'🚌'}</div>`;
   return `
   <div class="listing-card ${l.isNew?'is-new':''}" style="animation-delay:${delay}s">
-    <div class="card-image" onclick="openListing('${l.url}')">
+    <a class="btn-view" href="${l.url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">View →</a>
       ${imgContent}
       ${l.isNew?'<div class="card-new-label">NEW</div>':''}
       <div class="card-platform-badge" style="background:${p.color}">${p.icon} ${p.label}</div>
@@ -568,7 +568,7 @@ function cardHTML(l, i) {
         <div class="card-actions">
           <span class="card-age">${l.age||''}</span>
           <button class="btn-save" onclick="toggleSave('${l.id}',this)" title="${isSaved?'Unsave':'Save'}">${isSaved?'🔖':'🔖'}</button>
-          <button class="btn-view" onclick="openListing('${l.url}')">View →</button>
+          <a class="btn-view" href="${l.url}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">View →</a>
         </div>
       </div>
     </div>
@@ -576,7 +576,14 @@ function cardHTML(l, i) {
 }
 
 function openListing(url) {
-  window.open(url, '_blank');
+  if (!url) return;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 // ══ SAVED ══
